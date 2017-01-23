@@ -9,7 +9,7 @@
 #include "stabilization.h"
 #include "md5.h"
 
-// #define VERBOSE
+// #define VERBOSE 1010
 #ifdef VERBOSE 1
 #include <stdio.h>
 #endif
