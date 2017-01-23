@@ -31,3 +31,10 @@
 # Debug files
 *.dSYM/
 *.su
+
+bin/
+Captures/
+dat/
+lib/
+*.bat
+*.txt

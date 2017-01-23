@@ -10,7 +10,7 @@
 #include "md5.h"
 
 // #define VERBOSE
-#ifdef VERBOSE
+#ifdef VERBOSE 1
 #include <stdio.h>
 #endif
 
