@@ -18,6 +18,10 @@
 void meanVector(const unsigned int nbVector, const coord * const vectors,
 				coordf * const mean){
 	long x = 0, y = 0;
+
+	//PARALLELIZED
+	//omp_set_num_threads(8);
+	//#pragma parallel for schedule(dynamic) << RALENTI ?
 	for (const coord * vec = vectors; vec < vectors + nbVector; vec++){
 		x += vec->x;
 		y += vec->y;
@@ -29,9 +33,9 @@ void meanVector(const unsigned int nbVector, const coord * const vectors,
 
 void covarianceMatrix2D(const unsigned int nbVector, const coord * const vectors,
 						const coordf * const mean, matrix * const sigma){
-
+	/*
 	coordf *temp = malloc(nbVector*sizeof(coordf));
-
+	
 	// Substract mean to all vectors
 	for (unsigned int i = 0; i < nbVector; i++){
 		(temp + i)->x = (vectors + i)->x - mean->x;
@@ -44,11 +48,38 @@ void covarianceMatrix2D(const unsigned int nbVector, const coord * const vectors
 	sigma->coeffs[1] = 0.0;
 	sigma->coeffs[2] = 0.0;
 	sigma->coeffs[3] = 0.0;
-	for (unsigned int c = 0; c < nbVector; c++){
+	for (unsigned int c = 0; c < nbVector; c++) {
 		sigma->coeffs[0] += (temp + c)->x * (temp + c)->x;
 		sigma->coeffs[1] += (temp + c)->x * (temp + c)->y;
 		// sigma->coeffs[2] += equal to coeffs[1]
 		sigma->coeffs[3] += (temp + c)->y * (temp + c)->y;
+	}
+	*/
+
+	coordf *temp = malloc(nbVector * sizeof(coordf));
+
+	// Compute Sigma
+	// sigma(row,col) = temp(row)' * temp(col)
+	sigma->coeffs[0] = 0.0;
+	sigma->coeffs[1] = 0.0;
+	sigma->coeffs[2] = 0.0;
+	sigma->coeffs[3] = 0.0;
+
+	int c;
+
+	omp_set_num_threads(8);
+	#pragma omp parallel for schedule (dynamic)
+	for (c = 0; c < nbVector; c++) {
+		(temp + c)->x = (vectors + c)->x - mean->x;
+		(temp + c)->y = (vectors + c)->y - mean->y;
+
+#pragma omp critical
+		{
+			sigma->coeffs[0] += (temp + c)->x * (temp + c)->x;
+			sigma->coeffs[1] += (temp + c)->x * (temp + c)->y;
+			// sigma->coeffs[2] += equal to coeffs[1]
+			sigma->coeffs[3] += (temp + c)->y * (temp + c)->y;
+		}
 	}
 
 	// mean
@@ -58,7 +89,7 @@ void covarianceMatrix2D(const unsigned int nbVector, const coord * const vectors
 	sigma->coeffs[3] /= (nbVector - 1);
 
 	// free temp vectors
-	free(temp);
+	//free(temp);
 }
 
 void getProbabilities(const unsigned int nbVector, const coord * const vectors,
@@ -66,6 +97,7 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 	// Compute sigma determinant and inverse
 	float detSigma = sigma->coeffs[0] * sigma->coeffs[3] - sigma->coeffs[2] * sigma->coeffs[1];
 	matrix invSigma;
+	int i;
 
 	// If the multivariate gaussian can be computed.
 	if (detSigma > 0.0f){
@@ -75,7 +107,9 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 		const float divisor = 1.0f / sqrtf(4.0f * PI * PI * detSigma);
 
 		// Loop over the vectors to compute probability
-		for (unsigned int i = 0; i < nbVector; i++){
+		//omp_set_num_threads(8);
+//#pragma omp parallel for schedule (dynamic) >> SLOW
+		for (i = 0; i < nbVector; i++){
 			const coord *vec = vectors + i;
 			// Substract mean value
 			float tX = vec->x - mean->x;
@@ -98,7 +132,7 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 		// compute the probabilities for the dimension with non zero variance (if any).
 		if (dimension == 0){
 			// all vectors are identical
-			for (unsigned int i = 0; i < nbVector; i++){
+			for (i = 0; i < nbVector; i++){
 				proba[i] = 1.0;
 			}
 		}
@@ -109,7 +143,9 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 			const float divisor = 1.0f / (sqrtf(2.0f * PI) * var);
 
 			// Loop over the vectors to compute probability
-			for (unsigned int i = 0; i < nbVector; i++){
+			//omp_set_num_threads(8);
+//#pragma omp parallel for schedule(dynamic) >> SLOW
+			for (i = 0; i < nbVector; i++){
 				float val = (dimension == 2) ? vectors[i].x - mean->x : vectors[i].y - mean->y;
 				proba[i] = expf(-(val*val) / (2 * var))*divisor;
 			}

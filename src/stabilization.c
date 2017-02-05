@@ -17,6 +17,8 @@
 
 #include "stabilization.h"
 
+#define PARALLEL 1
+
 void renderFrame(const int frameWidth, const int frameHeight,
 				 const int dispWidth, const int dispHeight,
 				 const coordf * const delta,
@@ -42,15 +44,20 @@ void renderFrame(const int frameWidth, const int frameHeight,
 	int xRightClip = MIN(MAX(xRight, 0), dispWidth);
 	int yBotClip = MIN(MAX(yBot, 0), dispHeight);
 
+	int y;
+
+	/*
 	// Render Y
-	for (int y = yTopClip; y < yBotClip; y++){
+	#pragma omp parallel for schedule(dynamic)
+	for (y = yTopClip; y < yBotClip; y++){
 		memcpy(yOut + y*dispWidth + xLeftClip,
 			   yIn + (y - yTop)*frameWidth + (xLeftClip - xLeft),
 			   xRightClip - xLeftClip);
 	}
 
 	// Render UV
-	for (int y = yTopClip / 2; y < yBotClip / 2; y++){
+	#pragma omp parallel for schedule(dynamic)
+	for (y = yTopClip / 2; y < yBotClip / 2; y++){
 		memcpy(uOut + y*dispWidth / 2 + xLeftClip / 2,
 			   uIn + (y - yTop / 2)*frameWidth / 2 + (xLeftClip - xLeft) / 2,
 			   (xRightClip - xLeftClip) / 2);
@@ -58,6 +65,28 @@ void renderFrame(const int frameWidth, const int frameHeight,
 			   vIn + (y - yTop / 2)*frameWidth / 2 + (xLeftClip - xLeft) / 2,
 			   (xRightClip - xLeftClip) / 2);
 	}
+	*/
+	omp_set_num_threads(8);
+	#pragma omp parallel for schedule(dynamic)
+	for (y = yTopClip / 2; y < yBotClip; y++) {
+
+		if (y >= yTopClip) {	// Render Y
+		memcpy(yOut + y*dispWidth + xLeftClip,
+			yIn + (y - yTop)*frameWidth + (xLeftClip - xLeft),
+			xRightClip - xLeftClip);
+		}
+
+		if (y < yBotClip/2) {	// Render UV
+		memcpy(uOut + y*dispWidth / 2 + xLeftClip / 2,
+				uIn + (y - yTop / 2)*frameWidth / 2 + (xLeftClip - xLeft) / 2,
+				(xRightClip - xLeftClip) / 2);
+		memcpy(vOut + y*dispWidth / 2 + xLeftClip / 2,
+			vIn + (y - yTop / 2)*frameWidth / 2 + (xLeftClip - xLeft) / 2,
+			(xRightClip - xLeftClip) / 2);
+		}
+	}
+
+
 }
 
 void computeBlockMotionVectors(const int width, const int height,
@@ -77,20 +106,19 @@ void computeBlockMotionVectors(const int width, const int height,
 	blocksData = malloc(nbBlocks*blockSize*sizeof(unsigned char));
 	divideBlocks(width, height, blockWidth, blockHeight, frame, blocksCoord, blocksData);
 
-	// Process the blocks one by one
-	for (int blY = 0; blY < (height / blockHeight); blY++){
-		for (int blX = 0; blX < (width / blockWidth); blX++){
-			const unsigned char * const blockData = blocksData + (blY*blocksPerLine + blX)*blockSize;
-			const coord * const blockCoord = blocksCoord + blY*blocksPerLine + blX;
-			computeBlockMotionVector(width, height,
-									 blockWidth, blockHeight,
-									 maxDeltaX, maxDeltaY,
-									 blockCoord,
-									 blockData, previousFrame,
-									 vectors + blY*blocksPerLine + blX);
+		// Process the blocks one by one
+		for (int blY = 0; blY < (height / blockHeight); blY++) {
+			for (int blX = 0; blX < (width / blockWidth); blX++) {
+				const unsigned char * const blockData = blocksData + (blY*blocksPerLine + blX)*blockSize;
+				const coord * const blockCoord = blocksCoord + blY*blocksPerLine + blX;
+				computeBlockMotionVector(width, height,
+					blockWidth, blockHeight,
+					maxDeltaX, maxDeltaY,
+					blockCoord,
+					blockData, previousFrame,
+					vectors + blY*blocksPerLine + blX);
+			}
 		}
-	}
-
 	// Free blocks memory
 	free(blocksCoord);
 	free(blocksData);
@@ -136,7 +164,7 @@ unsigned int computeMeanSquaredError(const int width, const int height,
 
 	return cost;
 }
-
+/*
 void computeBlockMotionVector(const int width, const int height,
 							  const int blockWidth, const int blockHeight,
 							  const int maxDeltaX, const int maxDeltaY,
@@ -155,26 +183,79 @@ void computeBlockMotionVector(const int width, const int height,
 	unsigned int minCost = UINT_MAX;
 	vector->x = 0;
 	vector->y = 0;
+
+	int deltaY;
+	int deltaX;
+
 	// Raster scan neighborhood
-	for (int deltaY = deltaYTop; deltaY < deltaYBot; deltaY++){
-		for (int deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++){
+	for (deltaY = deltaYTop; deltaY < deltaYBot; deltaY++) {
+			for (deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++) {
+				// Compute MSE
+				unsigned int cost = computeMeanSquaredError(width, height,
+					blockWidth, blockHeight,
+					deltaX, deltaY,
+					blockCoord,
+					blockData, previousFrame);
+
+				// Minimizes MSE
+				if (cost < minCost) {
+					minCost = cost;
+					vector->x = deltaX - blockCoord->x;
+					vector->y = deltaY - blockCoord->y;
+				}
+			}
+		}
+}*/
+
+void computeBlockMotionVector(const int width, const int height,
+	const int blockWidth, const int blockHeight,
+	const int maxDeltaX, const int maxDeltaY,
+	const coord * const blockCoord, const unsigned char * const blockData,
+	const unsigned char * const previousFrame,
+	coord * const vector) {
+	// Compute neighboorhood start positions
+	// Top-left 
+	int deltaYTop = blockCoord->y - maxDeltaY;
+	int deltaXLeft = blockCoord->x - maxDeltaX;
+	// Bottom-right +(1,1)
+	int deltaYBot = blockCoord->y + maxDeltaY;
+	int deltaXRight = blockCoord->x + maxDeltaX;
+
+	// Initialize MMSE search
+	unsigned int minCost = UINT_MAX;
+	int minDeltaY = deltaYTop; //Last modification
+	vector->x = 0;
+	vector->y = 0;
+
+	int deltaY;
+	int deltaX;
+
+	// Raster scan neighborhood
+	omp_set_num_threads(8);
+	#pragma omp parallel for private (deltaX) schedule(dynamic)
+	for (deltaY = deltaYTop; deltaY < deltaYBot; deltaY++) {
+		for (deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++) {
 			// Compute MSE
 			unsigned int cost = computeMeanSquaredError(width, height,
-														blockWidth, blockHeight,
-														deltaX, deltaY,
-														blockCoord,
-														blockData, previousFrame);
+				blockWidth, blockHeight,
+				deltaX, deltaY,
+				blockCoord,
+				blockData, previousFrame);
 
 			// Minimizes MSE
-			if (cost < minCost){
-				minCost = cost;
-				vector->x = deltaX - blockCoord->x;
-				vector->y = deltaY - blockCoord->y;
+			if (cost < minCost || (cost == minCost && deltaY < minDeltaY)) { // Just for speed
+			#pragma omp critical 
+				if (cost < minCost || (cost == minCost && deltaY < minDeltaY)) {
+
+					minCost = cost;
+					minDeltaY = deltaY;
+					vector->x = deltaX - blockCoord->x;
+					vector->y = deltaY - blockCoord->y;
+				}
 			}
 		}
 	}
 }
-
 
 void divideBlocks(const int width, const int height,
 				  const int blockWidth, const int blockHeight,
@@ -222,11 +303,17 @@ void findDominatingMotionVector(const int nbVectors,
 		// could be used instead)
 		float * probas = malloc(nbVectors*sizeof(nbVectors));
 		getProbabilities(nbVectors, vectors, &mean, &sigma, probas);
-
+		 
+		int i;
+		
 		// Keep the mean of most probable vectors
 		// find max proba
 		float threshold = 0.0f;
-		for (int i = 0; i < nbVectors; i++){
+
+		//Inutile ?
+		//omp_set_num_threads(8);
+		//#pragma omp parallel for schedule(dynamic)
+		for (i = 0; i < nbVectors; i++){
 			threshold = MAX(threshold, probas[i]);
 		}
 
@@ -235,16 +322,23 @@ void findDominatingMotionVector(const int nbVectors,
 		dominatingVector->x = 0.0f;
 		dominatingVector->y = 0.0f;
 		int nbAbove = 0;
-		for (int i = 0; i < nbVectors; i++){
-			if (probas[i] > threshold){
-				nbAbove++;
-				dominatingVector->x += vectors[i].x;
-				dominatingVector->y += vectors[i].y;
-			}
+
+		omp_set_num_threads(8);
+		#pragma omp parallel for schedule(dynamic)
+		for (i = 0; i < nbVectors; i++){
+				if (probas[i] > threshold) {
+#pragma omp critical
+					{
+					nbAbove++;
+					dominatingVector->x += vectors[i].x;
+					dominatingVector->y += vectors[i].y;
+					}
+				}
 		}
+
 		dominatingVector->x /= (float)nbAbove;
 		dominatingVector->y /= (float)nbAbove;
-
+		
 
 		// Cleanup
 		free(probas);

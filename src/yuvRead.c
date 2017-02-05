@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include "clock.h"
 
-#define FPS_INTERVAL 10
+#define FPS_INTERVAL 100
 
 /*========================================================================
 

@@ -9,7 +9,8 @@
 #include "stabilization.h"
 #include "md5.h"
 
-// #define VERBOSE 1010
+//#define VERBOSE
+#include <stdio.h> //TO DELETE
 #ifdef VERBOSE 1
 #include <stdio.h>
 #endif
@@ -32,6 +33,11 @@ int main(int argc, char** argv)
 	// Open files
 	initReadYUV(WIDTH, HEIGHT);
 	initYUVWrite();
+	
+	//clear MD5 file //TO DELETE
+	FILE *f = fopen("MD5_new.txt", "w");
+	fprintf(f, "");
+	fclose(f);
 
 	unsigned int frameIndex = 1;
 	while (!stopThreads)
@@ -40,10 +46,10 @@ int main(int argc, char** argv)
 		memcpy(yPrevious, y, HEIGHT*WIDTH);
 
 		// Read a frame
-		readYUV(WIDTH, HEIGHT, y, u, v);
+		readYUV(WIDTH, HEIGHT, y, u, v); //1 float : FPS
 
 		// Compute motion vectors
-		computeBlockMotionVectors(WIDTH, HEIGHT,
+		computeBlockMotionVectors(WIDTH, HEIGHT,							//PARALLELIZED
 								  BLOCK_WIDTH, BLOCK_HEIGHT,
 								  MAX_DELTA_X, MAX_DELTA_Y,
 								  y, yPrevious,
@@ -51,8 +57,8 @@ int main(int argc, char** argv)
 
 		// Find dominating motion vector
 		const int nbVectors = (HEIGHT / BLOCK_HEIGHT)*(WIDTH / BLOCK_WIDTH);
-		findDominatingMotionVector(nbVectors,
-								   motionVectors, &dominatingMotionVector);
+		findDominatingMotionVector(nbVectors,								//PARALLELIZED
+								   motionVectors, &dominatingMotionVector);	//Tableau de floats
 		#ifdef VERBOSE
 		// Print motion vector
 		printf("Frame %3d: %2.2f, %2.2f\n", frameIndex,
@@ -62,7 +68,7 @@ int main(int argc, char** argv)
 		// Accumulate motion
 		accumulateMotion(&dominatingMotionVector, &accumulatedMotion, &accumulatedMotion);
 
-		// Render the motion compensated frame
+		// Render the motion compensated frame	//PARALLELIZED
 		renderFrame(WIDTH, HEIGHT, DISPLAY_W, DISPLAY_H, &accumulatedMotion, y, u, v, yDisp, uDisp, vDisp);
 
 		// Display it
@@ -76,8 +82,9 @@ int main(int argc, char** argv)
 
 		// Exit ?
 		frameIndex++;
-		if (frameIndex == NB_FRAME){
+		if (frameIndex == NB_FRAME){//NB_FRAME){
 			stopThreads = 1;
+			//system("pause");
 		}
 	}
 

@@ -36,7 +36,7 @@
  */
 
 #ifndef HAVE_OPENSSL
-
+#include <stdio.h>
 #include <string.h>
 
 #include "md5.h"
@@ -295,13 +295,27 @@ void MD5_Update(unsigned long size, const void *data)
 
 	MD5_Final(hash);
 
+	FILE *f = fopen("MD5_new.txt", "a");
+
+	fprintf(f, "MD5 %3d: ", frameIndex++);
+
+	for (int i = 16; i > 0; i -= 1) {
+		fprintf(f, "%02x", *(hash + i - 1));
+	}
+	fprintf(f, "\n");
+
+	fclose(f);
+
 #ifdef VERBOSE
 	// Print MD5
-	printf("MD5 %3d: ", frameIndex++);
-	for (int i = 16; i > 0; i -= 1){
+	
+	printf("MD5 %3d: ", frameIndex);
+	for (int i = 16; i > 0; i -= 1) {
 		printf("%02x", *(hash + i - 1));
 	}
+	
 	printf("\n");
+	
 #endif
 }
 
