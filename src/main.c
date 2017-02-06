@@ -19,6 +19,8 @@ int stopThreads = 0;
 
 int main(int argc, char** argv)
 {
+	omp_set_num_threads(8);
+
 	// Declarations
 	static unsigned char y[HEIGHT*WIDTH], u[HEIGHT*WIDTH / 4], v[HEIGHT*WIDTH / 4];
 	static unsigned char yPrevious[HEIGHT*WIDTH];

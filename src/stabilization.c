@@ -66,8 +66,7 @@ void renderFrame(const int frameWidth, const int frameHeight,
 			   (xRightClip - xLeftClip) / 2);
 	}
 	*/
-	omp_set_num_threads(8);
-	#pragma omp parallel for schedule(dynamic)
+	#pragma omp parallel for schedule(static)
 	for (y = yTopClip / 2; y < yBotClip; y++) {
 
 		if (y >= yTopClip) {	// Render Y
@@ -184,12 +183,9 @@ void computeBlockMotionVector(const int width, const int height,
 	vector->x = 0;
 	vector->y = 0;
 
-	int deltaY;
-	int deltaX;
-
 	// Raster scan neighborhood
-	for (deltaY = deltaYTop; deltaY < deltaYBot; deltaY++) {
-			for (deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++) {
+	for (int deltaY = deltaYTop; deltaY < deltaYBot; deltaY++) {
+			for (int deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++) {
 				// Compute MSE
 				unsigned int cost = computeMeanSquaredError(width, height,
 					blockWidth, blockHeight,
@@ -231,7 +227,6 @@ void computeBlockMotionVector(const int width, const int height,
 	int deltaX;
 
 	// Raster scan neighborhood
-	omp_set_num_threads(8);
 	#pragma omp parallel for private (deltaX) schedule(dynamic)
 	for (deltaY = deltaYTop; deltaY < deltaYBot; deltaY++) {
 		for (deltaX = deltaXLeft; deltaX < deltaXRight; deltaX++) {
@@ -264,9 +259,12 @@ void divideBlocks(const int width, const int height,
 				  unsigned char * const blocksData){
 	const int blocksPerLine = width / blockWidth;
 	const int blockSize = blockHeight*blockWidth;
+
+	int y, x;
 	// Raster scan blocks
-	for (int y = 0; y < height / blockHeight; y++){
-		for (int x = 0; x < blocksPerLine; x++){
+    #pragma omp parallel for private(x) schedule(static)
+	for (y = 0; y < height / blockHeight; y++){
+		for (x = 0; x < blocksPerLine; x++){
 			coord * blockCoord = blocksCoord + y*(blocksPerLine)+x;
 			unsigned char * blockData = blocksData + (y*(blocksPerLine)+x)*blockSize;
 			blockCoord->x = x*blockWidth;
@@ -311,7 +309,6 @@ void findDominatingMotionVector(const int nbVectors,
 		float threshold = 0.0f;
 
 		//Inutile ?
-		//omp_set_num_threads(8);
 		//#pragma omp parallel for schedule(dynamic)
 		for (i = 0; i < nbVectors; i++){
 			threshold = MAX(threshold, probas[i]);
@@ -323,11 +320,10 @@ void findDominatingMotionVector(const int nbVectors,
 		dominatingVector->y = 0.0f;
 		int nbAbove = 0;
 
-		omp_set_num_threads(8);
 		#pragma omp parallel for schedule(dynamic)
 		for (i = 0; i < nbVectors; i++){
 				if (probas[i] > threshold) {
-#pragma omp critical
+					#pragma omp critical
 					{
 					nbAbove++;
 					dominatingVector->x += vectors[i].x;

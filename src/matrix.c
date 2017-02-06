@@ -20,7 +20,6 @@ void meanVector(const unsigned int nbVector, const coord * const vectors,
 	long x = 0, y = 0;
 
 	//PARALLELIZED
-	//omp_set_num_threads(8);
 	//#pragma parallel for schedule(dynamic) << RALENTI ?
 	for (const coord * vec = vectors; vec < vectors + nbVector; vec++){
 		x += vec->x;
@@ -67,8 +66,7 @@ void covarianceMatrix2D(const unsigned int nbVector, const coord * const vectors
 
 	int c;
 
-	omp_set_num_threads(8);
-	#pragma omp parallel for schedule (dynamic)
+	#pragma omp parallel for schedule (static)
 	for (c = 0; c < nbVector; c++) {
 		(temp + c)->x = (vectors + c)->x - mean->x;
 		(temp + c)->y = (vectors + c)->y - mean->y;
@@ -107,7 +105,6 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 		const float divisor = 1.0f / sqrtf(4.0f * PI * PI * detSigma);
 
 		// Loop over the vectors to compute probability
-		//omp_set_num_threads(8);
 //#pragma omp parallel for schedule (dynamic) >> SLOW
 		for (i = 0; i < nbVector; i++){
 			const coord *vec = vectors + i;
@@ -143,7 +140,6 @@ void getProbabilities(const unsigned int nbVector, const coord * const vectors,
 			const float divisor = 1.0f / (sqrtf(2.0f * PI) * var);
 
 			// Loop over the vectors to compute probability
-			//omp_set_num_threads(8);
 //#pragma omp parallel for schedule(dynamic) >> SLOW
 			for (i = 0; i < nbVector; i++){
 				float val = (dimension == 2) ? vectors[i].x - mean->x : vectors[i].y - mean->y;
